@@ -1,5 +1,7 @@
 const express = require('express');
 const router = express.Router();
+const User = require('../models/user');
+const Review = require('../models/Review');
 const Booking = require('../models/Booking'); //
 const Vehicle = require('../models/Vehicle'); //
 
@@ -8,9 +10,61 @@ const Vehicle = require('../models/Vehicle'); //
 // ================================================================
 router.post('/book', async (req, res) => {
     try {
-        const { vehicle_id, vendor_id, renter_id, start_date, end_date, price_per_day, delivery_mode, delivery_address, delivery_lat, delivery_lng, payment_method } = req.body;
+        const {
+            vehicle_id, vendor_id, renter_id, start_date, end_date, booking_type, start_time, hours,
+            price_per_day, driver_price_per_day, fuel_price,
+            with_driver, driver_dates, 
+            delivery_mode, delivery_address, delivery_lat, delivery_lng,
+            payment_method
+        } = req.body;
+        
+        // 0. Check if the vendor is open for business
+        const vendor = await User.findById(vendor_id);
+        if (!vendor) {
+            return res.status(400).json({ error: 'Invalid vendor ID provided.' });
+        }
+        if (!vendor.roles.includes('vendor')) {
+            return res.status(400).json({ error: 'Invalid vendor ID provided.' });
+        }
+        if (vendor.status === 'closed') {
+            return res.status(400).json({ error: 'This vendor is currently closed and not accepting new bookings.' });
+        }
+        if (vendor.status === 'banned') {
+            return res.status(400).json({ error: 'This vendor account has been suspended.' });
+        }
 
+        const vehicle = await Vehicle.findById(vehicle_id);
+        if (!vehicle) {
+            return res.status(404).json({ error: 'Vehicle not found.' });
+        }
+
+        // Check operating hours window
+        if (vehicle.allow_hourly_rentals && vehicle.operating_hours_start && vehicle.operating_hours_end) {
+            const now = new Date();
+            const currentTime = now.getHours() * 60 + now.getMinutes();
+            const [sh, sm] = vehicle.operating_hours_start.split(':').map(Number);
+            const [eh, em] = vehicle.operating_hours_end.split(':').map(Number);
+            const startTime = sh * 60 + sm;
+            const endTime = eh * 60 + em;
+            const isOpen = endTime < startTime
+                ? (currentTime >= startTime || currentTime <= endTime)
+                : (currentTime >= startTime && currentTime <= endTime);
+            if (!isOpen) {
+                return res.status(400).json({ error: `This vendor is closed right now. Operating hours: ${vehicle.operating_hours_start} - ${vehicle.operating_hours_end}.` });
+            }
+        }
+
+        // 0b. Check if the renter is banned
+        const renter = await User.findById(renter_id);
+        if (!renter || renter.status === 'banned') {
+            return res.status(403).json({ error: 'Your account has been suspended. You cannot make bookings.' });
+        }
         // 1. Double check if the car was booked by another renter during this timeline
+        // Server-side validation for single-day daily bookings
+        if (booking_type === 'daily' && start_date === end_date) {
+            return res.status(400).json({ error: 'Daily rentals must be for at least two days. Please use the hourly option for single-day bookings.' });
+        }
+
         const overlappingBooking = await Booking.findOne({
             vehicle: vehicle_id,
             status: { $in: ['pending', 'confirmed', 'active'] },
@@ -23,8 +77,26 @@ router.post('/book', async (req, res) => {
             return res.status(400).json({ error: 'This vehicle has already been reserved for the selected dates.' });
         }
 
-        const totalDays = Math.max(1, Math.ceil((new Date(end_date) - new Date(start_date)) / 86400000));
-        const total_price = totalDays * price_per_day;
+        let vehicle_total_price = 0;
+        if (booking_type === 'hourly') {
+            if (!hours || hours < (vehicle.minimum_hours || 1)) {
+                return res.status(400).json({ error: `Minimum booking duration is ${vehicle.minimum_hours || 1} hours.` });
+            }
+            vehicle_total_price = hours * (vehicle.hourly_rate || 0);
+        } else {
+            const totalDays = Math.max(1, Math.ceil((new Date(end_date) - new Date(start_date)) / 86400000));
+            vehicle_total_price = totalDays * (price_per_day || 0);
+        }
+
+        // For hourly bookings, ensure the end_date is the same as the start_date
+        const final_end_date = booking_type === 'hourly' ? new Date(start_date) : new Date(end_date);
+
+        let driver_total_price = 0;
+        if (with_driver && driver_dates && driver_dates.length > 0) {
+            driver_total_price = driver_dates.length * (driver_price_per_day || 0);
+        }
+
+        const total_price = vehicle_total_price + driver_total_price + (Number(fuel_price) || 0);
 
         // FIXED: Maps your body params exactly to your model property schema definitions
         const booking = new Booking({
@@ -32,8 +104,15 @@ router.post('/book', async (req, res) => {
             renter: renter_id,
             vendor: vendor_id,
             start_date: new Date(start_date),
-            end_date: new Date(end_date),
+            end_date: final_end_date,
             total_price,
+            booking_type,
+            start_time,
+            hours,
+            with_driver,
+            driver_dates: driver_dates || [],
+            driver_total_price,
+            fuel_price: Number(fuel_price) || 0,
             delivery_mode,
             delivery_address,
             delivery_lat,
@@ -92,9 +171,9 @@ router.get('/renter/:renterId', async (req, res) => {
 router.get('/renter/:renterId/all', async (req, res) => {
     try {
         const bookings = await Booking.find({ renter: req.params.renterId })
-            .populate('vehicle', 'make')
-            .populate('vendor', 'full_name')
-            .sort({ createdAt: -1 });
+            .populate('vehicle', 'make model_year registration_no photos') // Provide more vehicle details
+            .populate('vendor', 'full_name') // Provide vendor name
+            .sort({ createdAt: -1 }); // Show most recent first
         res.status(200).json({ bookings });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -108,8 +187,22 @@ router.get('/vendor/:vendorId', async (req, res) => {
     try {
         const bookings = await Booking.find({ vendor: req.params.vendorId })
             .populate('vehicle', 'make model_year registration_no') // Populate vehicle details too
-            .populate('renter', 'full_name phone email cnic_image license_image createdAt') // Add more renter details
-            .sort({ createdAt: -1 });
+            .populate('renter') // Populate the FULL renter object, including all images
+            .sort({ createdAt: -1 })
+            .lean(); // Use lean() for better performance and to allow modification
+
+        // Manually calculate and attach average rating for each renter
+        for (let booking of bookings) {
+            if (booking.renter) {
+                const reviews = await Review.find({ reviewee: booking.renter._id });
+                if (reviews.length > 0) {
+                    const totalRating = reviews.reduce((sum, review) => sum + review.rating, 0);
+                    booking.renter.avg_rating = totalRating / reviews.length;
+                } else {
+                    booking.renter.avg_rating = 0;
+                }
+            }
+        }
         res.status(200).json({ bookings });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -218,6 +311,58 @@ router.get('/track/:bookingId', async (req, res) => {
         res.status(200).json({ tracking_data: booking });
     } catch (err) {
         res.status(500).json({ error: err.message });
+    }
+});
+
+// ================================================================
+// PATCH /api/contracts/:bookingId/cancellation-seen (Marks notification as read)
+// ================================================================
+router.patch('/:bookingId/cancellation-seen', async (req, res) => {
+    try {
+      const booking = await Booking.findById(req.params.bookingId);
+  
+      if (!booking) {
+        return res.status(404).json({ success: false, message: `Booking not found with id of ${req.params.bookingId}` });
+      }
+  
+      // In a real app with auth, you would check if req.user.id is the renter or vendor
+      // For now, we will allow the update.
+  
+      if (booking.status !== 'cancelled') {
+          return res.status(400).json({ success: false, message: 'Booking is not cancelled.' });
+      }
+  
+      booking.cancellation_seen = true;
+      await booking.save();
+  
+      res.status(200).json({ success: true, data: booking });
+  
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+});
+
+// ================================================================
+// PATCH /api/contracts/:bookingId/completion-seen (Marks completion notification as read)
+// ================================================================
+router.patch('/:bookingId/completion-seen', async (req, res) => {
+    try {
+      const booking = await Booking.findById(req.params.bookingId);
+  
+      if (!booking) {
+        return res.status(404).json({ success: false, message: `Booking not found with id of ${req.params.bookingId}` });
+      }
+  
+      if (booking.status !== 'completed') {
+          return res.status(400).json({ success: false, message: 'Booking is not completed.' });
+      }
+  
+      booking.completion_seen = true;
+      await booking.save();
+  
+      res.status(200).json({ success: true, data: booking });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
     }
 });
 

@@ -28,12 +28,19 @@ const VehicleSchema = new mongoose.Schema({
   // Listing status
   status: {
     type: String,
-    enum: ['pending_verification', 'verified', 'rejected', 'active', 'inactive'],
+    enum: ['pending_verification', 'verified', 'rejected', 'active', 'inactive', 'suspended'],
     default: 'pending_verification'
   },
 
   price_per_day: { type: Number },
   category: { type: String, enum: ['sedan', 'suv', 'luxury', 'sport', 'electric', 'van', 'truck'], default: 'sedan' },
+  driver_price_per_day: { type: Number, default: 0 },
+  with_petrol: { type: Boolean, default: false },
+
+  // Hourly rental options
+  hourly_rate: { type: Number, default: 0 },
+  minimum_hours: { type: Number, default: 1 },
+  allow_hourly_rentals: { type: Boolean, default: false },
 
 }, { timestamps: true });
 

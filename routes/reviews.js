@@ -1,13 +1,52 @@
 const express = require('express');
 const router = express.Router();
-const Review = require('../models/models/Review');
+const Review = require('../models/Review');
 
-// POST: Submit a new review
+// ================================================================
+// POST /api/reviews (Submit a new review and update booking status)
+// ================================================================
 router.post('/', async (req, res) => {
     try {
-        const { booking, reviewer, reviewee, role, rating, comment } = req.body;
-        const newReview = new Review({ booking, reviewer, reviewee, role, rating, comment });
+        const { bookingId, reviewer, reviewee, role, rating, comment } = req.body;
+
+        // 1. Find the booking and validate its state
+        const booking = await require('../models/Booking').findById(bookingId);
+
+        if (!booking) {
+            return res.status(404).json({ error: 'Booking not found.' });
+        }
+
+        if (booking.status !== 'completed') {
+            return res.status(400).json({ error: 'Reviews can only be submitted for completed bookings.' });
+        }
+
+        // 2. Check if a review has already been submitted
+        if (role === 'renter' && booking.renter_reviewed_vendor) {
+            return res.status(400).json({ error: 'You have already reviewed this vendor for this booking.' });
+        }
+        if (role === 'vendor' && booking.vendor_reviewed_renter) {
+            return res.status(400).json({ error: 'You have already reviewed this renter for this booking.' });
+        }
+
+        // 3. Create and save the new review
+        const newReview = new Review({
+            booking: bookingId,
+            reviewer,
+            reviewee,
+            role,
+            rating,
+            comment
+        });
         await newReview.save();
+
+        // 4. Update the booking with the new review status flag
+        if (role === 'renter') {
+            booking.renter_reviewed_vendor = true;
+        } else if (role === 'vendor') {
+            booking.vendor_reviewed_renter = true;
+        }
+        await booking.save();
+
         res.status(201).json({ success: true, review: newReview });
     } catch (err) {
         res.status(500).json({ error: err.message });

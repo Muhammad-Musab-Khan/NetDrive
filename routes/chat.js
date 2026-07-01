@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Chat = require('../models/Chat');
+const User = require('../models/user'); // Import User model
 
 // ── GET /api/messages?userA=&userB= ─────────────────────────────
 // Load chat thread between renter (userA) and vendor (userB)
@@ -26,6 +27,18 @@ router.post('/send', async (req, res) => {
   const { sender_id, sender_name, sender_role, content, receiver_id,
           renter_name, vendor_name, renter_email, vendor_email } = req.body;
   try {
+    // BAN CHECK: Prevent banned users from sending or receiving messages.
+    const sender = await User.findById(sender_id);
+    if (sender && sender.status === 'banned') {
+        return res.status(403).json({ error: 'Your account is suspended. You cannot send messages.' });
+    }
+
+    const receiver = await User.findById(receiver_id);
+    if (receiver && receiver.status === 'banned') {
+        return res.status(403).json({ error: 'This user account has been suspended.' });
+    }
+
+
     let renter_id = sender_role === 'renter' ? sender_id : receiver_id;
     let vendor_id = sender_role === 'vendor' ? sender_id : receiver_id;
 
@@ -95,18 +108,6 @@ router.get('/global-intercept', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-});
-// ================================================================
-// GET /api/messages/my-chats/:vendorId (Loads all active threads for the side panel)
-// ================================================================
-router.get('/my-chats/:vendorId', async (req, res) => {
-    try {
-        // Find all chats containing this vendor
-        const chats = await Chat.find({ vendor_id: req.params.vendorId }).sort({ last_message_at: -1 });
-        res.status(200).json({ chats });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
 });
 
 

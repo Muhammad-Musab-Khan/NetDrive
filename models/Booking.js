@@ -6,6 +6,12 @@ const BookingSchema = new mongoose.Schema({
   vendor:      { type: mongoose.Schema.Types.ObjectId, ref: 'User',    required: true },
   start_date:  { type: Date, required: true },
   end_date:    { type: Date, required: true },
+
+  // Hourly booking fields
+  booking_type: { type: String, enum: ['daily', 'hourly'], default: 'daily' },
+  start_time: { type: String },
+  hours: { type: Number },
+
   total_price: { type: Number, required: true },
   status: {
     type: String,
@@ -14,6 +20,20 @@ const BookingSchema = new mongoose.Schema({
   },
   is_manual_block: { type: Boolean, default: false },
   decline_reason: { type: String },
+  cancellation_seen: { type: Boolean, default: false }, // To ensure cancellation notification is shown only once
+  completion_seen: { type: Boolean, default: false }, // To ensure completion notification is shown only once
+
+  // Review tracking
+  renter_reviewed_vendor: { type: Boolean, default: false },
+  vendor_reviewed_renter: { type: Boolean, default: false },
+
+  // Driver options
+  with_driver: { type: Boolean, default: false },
+  driver_dates: [{ type: Date }],
+  driver_total_price: { type: Number, default: 0 },
+
+  // Prepaid fuel
+  fuel_price: { type: Number, default: 0 },
 
   delivery_mode: { type: String, enum: ['pickup', 'dropoff'], default: 'pickup' },
   delivery_address: { type: String },
