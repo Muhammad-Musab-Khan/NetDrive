@@ -140,10 +140,9 @@ router.post('/signup', upload.fields([
     }
 });
 
-// ================================================================
 // 2. VERIFY OTP
 // Finds OTP by email+role, verifies that specific document only.
-// ================================================================
+
 router.post('/verify-otp', async (req, res) => {
     try {
         const { email, otp, role } = req.body;
@@ -169,9 +168,9 @@ router.post('/verify-otp', async (req, res) => {
     }
 });
 
-// ================================================================
+
 // 2b. RESEND OTP (for initial verification)
-// ================================================================
+
 router.post('/resend-otp', async (req, res) => {
     try {
         const { email, role } = req.body;
@@ -335,9 +334,9 @@ router.get('/admin/users', async (req, res) => {
     }
 });
 
-// ================================================================
+
 // 8. GET /api/auth/user/:userId (Pulls a single user for details)
-// ================================================================
+
 router.get('/user/:userId', async (req, res) => {
     try {
         const user = await User.findById(req.params.userId, '-password'); // Exclude password
@@ -350,9 +349,9 @@ router.get('/user/:userId', async (req, res) => {
     }
 });
 
-// ================================================================
+
 // PATCH /api/auth/admin/users/:userId/ban (Ban or unban a user)
-// ================================================================
+
 router.patch('/admin/users/:userId/ban', async (req, res) => {
     try {
         const { banned } = req.body;
@@ -368,9 +367,8 @@ router.patch('/admin/users/:userId/ban', async (req, res) => {
     }
 });
 
-// ================================================================
 // DELETE /api/auth/admin/users/:userId (Permanently delete a user)
-// ================================================================
+
 router.delete('/admin/users/:userId', async (req, res) => {
     try {
         const user = await User.findByIdAndDelete(req.params.userId);
@@ -381,9 +379,8 @@ router.delete('/admin/users/:userId', async (req, res) => {
     }
 });
 
-// ================================================================
 // PATCH /api/auth/user/:userId/profile (Update user profile)
-// ================================================================
+
 router.patch('/user/:userId/profile', upload.single('profile_photo'), async (req, res) => { // Added upload middleware
     try {
         const { userId } = req.params;

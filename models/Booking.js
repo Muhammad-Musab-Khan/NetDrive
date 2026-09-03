@@ -11,6 +11,7 @@ const BookingSchema = new mongoose.Schema({
   booking_type: { type: String, enum: ['daily', 'hourly'], default: 'daily' },
   start_time: { type: String },
   hours: { type: Number },
+  vehicle_rental_price: { type: Number, required: true }, // Base price for vehicle rental only
 
   total_price: { type: Number, required: true },
   status: {
@@ -38,6 +39,16 @@ const BookingSchema = new mongoose.Schema({
   delivery_mode: { type: String, enum: ['pickup', 'dropoff'], default: 'pickup' },
   delivery_address: { type: String },
   payment_method: { type: String, enum: ['cash', 'card'], default: 'cash' },
+
+  // ── Payment tracking (Stripe) ─────────────────────────────────
+  payment_status: {
+    type: String,
+    enum: ['pending', 'paid', 'cash_on_delivery'],
+    default: 'pending'
+  },
+  stripe_payment_intent_id: { type: String },
+  credit_applied: { type: Number, default: 0 },
+
   delivery_lat: { type: Number },
   delivery_lng: { type: Number },
 

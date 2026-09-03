@@ -3,10 +3,10 @@ const router = express.Router();
 const Chat = require('../models/Chat');
 const User = require('../models/user'); // Import User model
 
-// ── GET /api/messages?userA=&userB= ─────────────────────────────
+
 // Load chat thread between renter (userA) and vendor (userB)
 router.get('/', async (req, res) => {
-  const { userA, userB } = req.query;
+  const { userA, userB, markReadFor } = req.query;
   try {
     // Order-independent: find the chat regardless of who is renter/vendor
     const chat = await Chat.findOne({
@@ -15,13 +15,28 @@ router.get('/', async (req, res) => {
         { renter_id: userB, vendor_id: userA }
       ]
     });
+    
+    if (chat && markReadFor) {
+      let changed = false;
+      if (chat.renter_id.toString() === markReadFor && chat.renter_unread) {
+        chat.renter_unread = false;
+        changed = true;
+      } else if (chat.vendor_id.toString() === markReadFor && chat.vendor_unread) {
+        chat.vendor_unread = false;
+        changed = true;
+      }
+      if (changed) {
+        await chat.save();
+      }
+    }
+    
     res.status(200).json({ messages: chat ? chat.messages : [] });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// ── POST /api/messages/send ──────────────────────────────────────
+
 // Both renter AND vendor can call this — role is passed in payload
 router.post('/send', async (req, res) => {
   const { sender_id, sender_name, sender_role, content, receiver_id,
@@ -62,6 +77,14 @@ router.post('/send', async (req, res) => {
     }
 
     chat.messages.push({ sender_id, sender_name, sender_role, content });
+
+    // Mark as unread for the receiver
+    if (sender_role === 'renter') {
+      chat.vendor_unread = true;
+    } else {
+      chat.renter_unread = true;
+    }
+
     chat.last_message_at = new Date();
     await chat.save();
     res.status(200).json({ success: true, chat });
@@ -70,7 +93,6 @@ router.post('/send', async (req, res) => {
   }
 });
 
-// ── GET /api/messages/my-chats/:userId ──────────────────────────
 // Vendor or renter: list all their chat threads (for chat inbox)
 router.get('/my-chats/:userId', async (req, res) => {
   try {
@@ -86,7 +108,24 @@ router.get('/my-chats/:userId', async (req, res) => {
   }
 });
 
-// ── GET /api/messages/global-intercept ──────────────────────────
+// Mark a chat as read by the user
+router.patch('/:chatId/mark-read/:userId', async (req, res) => {
+  try {
+    const chat = await Chat.findById(req.params.chatId);
+    if (!chat) return res.status(404).json({ error: 'Chat not found' });
+
+    if (chat.renter_id.toString() === req.params.userId) {
+      chat.renter_unread = false;
+    } else if (chat.vendor_id.toString() === req.params.userId) {
+      chat.vendor_unread = false;
+    }
+    await chat.save();
+    res.status(200).json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Admin: all chat threads with full sender names and content
 router.get('/global-intercept', async (req, res) => {
   try {

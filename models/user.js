@@ -14,6 +14,9 @@ const UserSchema = new mongoose.Schema({
   document_expiry: { type: Date },
   vendor_address: { type: String, default: null }, // ✅ Karachi showroom address for vendor profiles
 
+  // ── Dispute reward credit ──────────────────────────────────────
+  account_credit: { type: Number, default: 0 },
+
   is_phone_verified: { type: Boolean, default: false },
   is_email_verified: { type: Boolean, default: false },
   status: {

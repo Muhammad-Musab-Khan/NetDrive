@@ -18,6 +18,9 @@ const ChatSchema = new mongoose.Schema({
   vendor_email: { type: String, required: true },
   vendor_name: { type: String, required: true },
 
+  renter_unread: { type: Boolean, default: false },
+  vendor_unread: { type: Boolean, default: false },
+
   // Optional: linked vehicle
   vehicle_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Vehicle', default: null },
 

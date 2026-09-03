@@ -4,12 +4,15 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const path = require('path');
 
+
 // 1. Import Route Controllers cleanly
 const authRoutes = require('./routes/auth');
 const vehicleRoutes = require('./routes/vehicles');
 const chatRoutes = require('./routes/chat');
 const contractRoutes = require('./routes/contracts'); 
 const reviewRoutes = require('./routes/reviews');
+const disputeRoutes = require('./routes/disputes');
+const paymentRoutes = require('./routes/payments');
 
 const app = express();
 
@@ -36,6 +39,8 @@ app.use('/api/chat', chatRoutes);
 // MAPS CONTRACT ROUTER TO RESOLVE TRAFFIC NODES
 app.use('/api/contracts', contractRoutes); 
 app.use('/api/reviews', reviewRoutes);
+app.use('/api/disputes', disputeRoutes);
+app.use('/api/payments', paymentRoutes);
 
 // Catch-all 404 handler for missing route targets
 app.use((req, res) => {

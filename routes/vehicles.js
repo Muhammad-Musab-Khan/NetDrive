@@ -4,6 +4,7 @@ const Vehicle = require('../models/Vehicle'); //
 const Booking = require('../models/Booking'); //
 const User = require('../models/user'); // Import User model
 const { upload } = require('../middleware/auth');
+const { verifyVehicleListing } = require('../middleware/verifyVehicleListing');
 
 
 // POST /api/vehicles/list (Upload a new vehicle with photos)
@@ -12,7 +13,7 @@ router.post('/list', upload.fields([
     { name: 'photos', maxCount: 6 },
     { name: 'document_front', maxCount: 1 },
     { name: 'document_back', maxCount: 1 }
-]), async (req, res) => {
+]), verifyVehicleListing, async (req, res) => {
     try {
         const {
             vendor_id, vendor_email, make, model_year, registration_no,
@@ -61,7 +62,9 @@ router.post('/list', upload.fields([
 // ================================================================
 router.get('/all', async (req, res) => {
     try {
-        const query = { status: 'active' };
+        // Admin requests should see ALL vehicles, regardless of status.
+        const isAdminRequest = req.query.admin === 'true';
+        const query = isAdminRequest ? {} : { status: 'active' };
         
         // Add search functionality for car name, make, or model
         if (req.query.search) {
@@ -166,9 +169,9 @@ router.patch('/:vehicleId/toggle-status', async (req, res) => {
     }
 });
 
-// ================================================================
+
 // PATCH /api/vehicles/:vehicleId/edit (Allows vendors to edit photos)
-// ================================================================
+
 router.patch('/:vehicleId/edit', upload.fields([
     { name: 'photos', maxCount: 6 }
 ]), async (req, res) => {
@@ -242,6 +245,46 @@ router.delete('/:vehicleId', async (req, res) => {
         res.status(200).json({ msg: 'Vehicle has been permanently deleted.' });
     } catch (err) {
         res.status(500).json({ msg: 'Error deleting vehicle.', error: err.message });
+    }
+});
+
+// ================================================================
+// PATCH /api/vehicles/:vehicleId/admin-suspend (Admin suspends a vehicle)
+// ================================================================
+router.patch('/:vehicleId/admin-suspend', async (req, res) => {
+    try {
+        const { vehicleId } = req.params;
+        const vehicle = await Vehicle.findByIdAndUpdate(
+            vehicleId,
+            { status: 'suspended' },
+            { new: true }
+        );
+        if (!vehicle) {
+            return res.status(404).json({ msg: 'Vehicle not found.' });
+        }
+        res.status(200).json({ msg: 'Vehicle suspended successfully.', vehicle });
+    } catch (err) {
+        res.status(500).json({ msg: 'Error suspending vehicle.', error: err.message });
+    }
+});
+
+// ================================================================
+// PATCH /api/vehicles/:vehicleId/admin-unsuspend (Admin unsuspends a vehicle)
+// ================================================================
+router.patch('/:vehicleId/admin-unsuspend', async (req, res) => {
+    try {
+        const { vehicleId } = req.params;
+        const vehicle = await Vehicle.findByIdAndUpdate(
+            vehicleId,
+            { status: 'active' }, // Change status back to active
+            { new: true }
+        );
+        if (!vehicle) {
+            return res.status(404).json({ msg: 'Vehicle not found.' });
+        }
+        res.status(200).json({ msg: 'Vehicle unsuspended successfully.', vehicle });
+    } catch (err) {
+        res.status(500).json({ msg: 'Error unsuspending vehicle.', error: err.message });
     }
 });
 
