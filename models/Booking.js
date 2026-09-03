@@ -43,7 +43,7 @@ const BookingSchema = new mongoose.Schema({
   // ── Payment tracking (Stripe) ─────────────────────────────────
   payment_status: {
     type: String,
-    enum: ['pending', 'paid', 'cash_on_delivery'],
+    enum: ['pending', 'paid', 'cash_on_delivery', 'refunded'],
     default: 'pending'
   },
   stripe_payment_intent_id: { type: String },

@@ -153,6 +153,8 @@ router.post('/book', async (req, res) => {
         // Send Emails
         const { sendEmail } = require('../utils/emailService');
         const vehicleName = `${vehicle.make} ${vehicle.model_year}`;
+        // Only send immediately if cash or fully covered by credit
+        if (payment_method === "cash" || total_price <= 0) {
         
         // To Vendor
         const vendorHtml = `
@@ -178,6 +180,7 @@ router.post('/book', async (req, res) => {
             <p>Enjoy your ride!</p>
         `;
         sendEmail(renter.email, 'Booking Confirmed on NetDrive', renterHtml);
+        }
 
         res.status(200).json({ msg: 'Booking confirmed!', booking });
     } catch (err) {
@@ -331,6 +334,22 @@ router.patch('/:bookingId/decline', async (req, res) => {
                     payment_intent: booking.stripe_payment_intent_id,
                 });
                 booking.payment_status = 'refunded';
+
+                // Notify renter of refund
+                const { sendEmail } = require('../utils/emailService');
+                const refundHtml = `
+                    <h2>Booking Declined - Refund Issued</h2>
+                    <p>Hello,</p>
+                    <p>Unfortunately, your vendor declined the booking. But don't worry!</p>
+                    <p>A full refund for your card payment has been automatically issued via Stripe.</p>
+                    <p>Reason: ${reason || 'No reason provided'}</p>
+                    <p>The funds will appear in your bank account shortly.</p>
+                `;
+                
+                await booking.populate('renter');
+                if (booking.renter && booking.renter.email) {
+                    sendEmail(booking.renter.email, 'Booking Refunded on NetDrive', refundHtml);
+                }
             } catch (stripeErr) {
                 console.error('Stripe refund failed:', stripeErr);
             }

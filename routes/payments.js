@@ -6,14 +6,25 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 router.post('/create-intent', async (req, res) => {
     try {
         const { booking_id, amount } = req.body;
+        let receipt_email = req.body.receipt_email;
         if (!amount || amount <= 0) {
             return res.status(400).json({ error: 'Invalid amount.' });
+        }
+        
+        // Ensure receipt_email is fetched from DB if missing
+        if (!receipt_email && booking_id) {
+            const Booking = require('../models/Booking');
+            const booking = await Booking.findById(booking_id).populate('renter');
+            if (booking && booking.renter && booking.renter.email) {
+                receipt_email = booking.renter.email;
+            }
         }
 
         const paymentIntent = await stripe.paymentIntents.create({
             amount: Math.round(amount * 100), // smallest currency unit
             currency: 'pkr', // switch to 'usd' if your sandbox account rejects pkr
             metadata: { booking_id: booking_id || '' },
+            ...(receipt_email && { receipt_email }),
             automatic_payment_methods: { enabled: true },
         });
 
