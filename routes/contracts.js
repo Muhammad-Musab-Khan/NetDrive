@@ -470,12 +470,34 @@ router.patch('/:bookingId/mark-paid', async (req, res) => {
             return res.status(400).json({ error: 'Payment has not succeeded.' });
         }
 
-        const booking = await Booking.findByIdAndUpdate(
+                const booking = await Booking.findByIdAndUpdate(
             req.params.bookingId,
             { payment_status: 'paid', stripe_payment_intent_id: paymentIntentId },
             { new: true }
-        );
+        ).populate('vehicle').populate('renter').populate('vendor');
+
         if (!booking) return res.status(404).json({ error: 'Booking not found.' });
+
+        const { sendEmail } = require('../utils/emailService');
+        const vehicleName = `${booking.vehicle.make} ${booking.vehicle.model_year}`;
+
+        const vendorHtml = `
+            <h2>Payment Received & New Booking!</h2>
+            <p>Hello ${booking.vendor.full_name},</p>
+            <p>The renter <b>${booking.renter.full_name}</b> has paid <b>Rs. ${booking.total_price.toLocaleString()}</b> by card.</p>
+            <p>You have a new confirmed booking for your <b>${vehicleName}</b>.</p>
+            <p>Please log in to your vendor dashboard to manage this booking.</p>
+        `;
+        sendEmail(booking.vendor.email, 'Payment Received on NetDrive', vendorHtml);
+
+        const renterHtml = `
+            <h2>Payment Successful!</h2>
+            <p>Hello ${booking.renter.full_name},</p>
+            <p>We successfully received your card payment of <b>Rs. ${booking.total_price.toLocaleString()}</b>.</p>
+            <p>Your booking for the <b>${vehicleName}</b> is fully confirmed.</p>
+            <p>Enjoy your ride!</p>
+        `;
+        sendEmail(booking.renter.email, 'Payment Receipt & Booking Confirmed', renterHtml);
 
         res.status(200).json({ success: true, booking });
     } catch (err) {
